@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ta">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>செலவு குறிப்பு</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;500;700&family=Mukta+Malar:wght@800&display=swap">
+<style>
+:root { --paper:#f1f4f2; --card:#fff; --ink:#14211c; --muted:#5d6c66; --line:#d9e1dd; --accent:#1b6b55; --accent-ink:#fff; --alert:#b3261e; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --paper:#0f1815; --card:#17231f; --ink:#e6efeb; --muted:#93a49d; --line:#28392f; --accent:#4fc9a1; --accent-ink:#06231a; --alert:#ff8a80; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 "Noto Sans Tamil","Latha",system-ui,sans-serif; padding:20px 16px 56px; }
+.wrap { max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+h1 { font-family:"Mukta Malar","Noto Sans Tamil",sans-serif; font-weight:800; font-size:28px; line-height:1.2; margin:0; }
+.sub { color:var(--muted); font-size:13px; margin:2px 0 0; }
+.panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+form { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.full { grid-column:1/-1; }
+label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+input { width:100%; min-width:0; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); font:inherit; font-size:16px; }
+input:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+button { font:inherit; cursor:pointer; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); padding:10px 14px; font-weight:500; }
+button:disabled { opacity:.55; cursor:default; }
+.hint { font-size:12px; color:var(--muted); min-height:1.4em; margin-top:3px; }
+.totals { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.tot .k { font-size:12px; color:var(--muted); }
+.tot .v { font-family:"Mukta Malar","Noto Sans Tamil",sans-serif; font-weight:800; font-size:24px; font-variant-numeric:tabular-nums; }
+.ledger { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; font-size:12px; font-weight:500; color:var(--muted); padding:6px 6px 8px; border-bottom:1px solid var(--line); }
+td { padding:10px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+td.d { color:var(--muted); font-size:13px; white-space:nowrap; }
+.ta { font-weight:500; overflow-wrap:anywhere; }
+.en { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+th.a, td.a { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+td.a { font-weight:500; }
+td.x { width:1%; text-align:right; }
+.del { background:transparent; border:0; color:var(--muted); padding:2px 6px; }
+.del.sure { color:var(--alert); font-weight:700; }
+.empty { text-align:center; color:var(--muted); padding:22px 8px; }
+.note { font-size:13px; color:var(--muted); }
+.head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.head h2 { font-size:15px; margin:0; }
+.link { background:none; border:0; color:var(--muted); text-decoration:underline; padding:0; font-size:13px; }
+.err { color:var(--alert); font-size:13px; min-height:1.4em; }
+[hidden] { display:none !important; }
+@media (max-width:420px) { form { grid-template-columns:1fr; } h1 { font-size:24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>செலவு குறிப்பு</h1>
+    <p class="sub" id="sub">Expense notes</p>
+  </div>
+
+  <section class="panel" id="login" hidden>
+    <form id="lf">
+      <div class="full">
+        <label for="code">ரகசிய குறியீடு / Code</label>
+        <input id="code" type="password" autocomplete="current-password" required>
+        <div class="err" id="lerr"></div>
+      </div>
+      <div class="full"><button type="submit">உள்ளே / Open</button></div>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <section class="panel" id="entry" hidden style="margin-bottom:16px">
+      <form id="f" autocomplete="off">
+        <div><label for="date">தேதி / Date</label><input type="date" id="date" required></div>
+        <div><label for="amt">தொகை / Amount (₹)</label><input type="number" id="amt" inputmode="decimal" min="0" step="0.01" required></div>
+        <div class="full"><label for="en">பொருள் / Item (English)</label><input id="en" placeholder="e.g. petrol, tea, rent" required></div>
+        <div class="full"><label for="ta">தமிழ் (தானாக வரும், மாற்றலாம்)</label><input id="ta" placeholder="தமிழில் தானாக வரும்"><div class="hint" id="hint"></div></div>
+        <div class="full"><button type="submit" id="add">சேர் / Add</button></div>
+      </form>
+    </section>
+
+    <section class="totals" style="margin-bottom:16px">
+      <div class="panel tot"><div class="k">இந்த மாதம் / This month</div><div class="v" id="tMonth">₹0</div></div>
+      <div class="panel tot"><div class="k">மொத்தம் / All time</div><div class="v" id="tAll">₹0</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="head"><h2>பதிவுகள் / Entries</h2><span class="note" id="count"></span></div>
+      <div class="ledger">
+        <table>
+          <thead><tr><th>தேதி</th><th>பொருள்</th><th class="a">தொகை</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <p style="text-align:center;margin-top:16px"><button class="link" id="logout" type="button">வெளியேறு / Log out</button></p>
+  </div>
+  <p class="note" id="msg" hidden></p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const today = () => new Date().toLocaleDateString("en-CA");
+const MON = ["ஜன","பிப்","மார்","ஏப்","மே","ஜூன்","ஜூலை","ஆக","செப்","அக்","நவ","டிச"];
+const showDate = s => { const [y,m,d] = s.split("-"); return d + " " + (MON[+m-1] || m) + " " + y.slice(2); };
+const KEY = "sk_code";
+let code = "", role = "", items = [], armed = null, taEdited = false, seq = 0;
+
+$("date").value = today();
+function note(t) { const m = $("msg"); m.textContent = t; m.hidden = !t; }
+
+async function api(method, path, body) {
+  const r = await fetch("/api/expenses" + (path || ""), {
+    method, headers: { "x-code": code, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) { const e = new Error(j.error || "Error"); e.status = r.status; throw e; }
+  return j;
+}
+
+function render() {
+  const rows = [...items].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.ts||0) - (a.ts||0));
+  const tb = $("rows"); tb.replaceChildren();
+  if (!rows.length) {
+    const tr = document.createElement("tr"), td = document.createElement("td");
+    td.className = "empty"; td.colSpan = 4;
+    td.textContent = role === "edit" ? "இன்னும் பதிவு இல்லை. மேலே முதல் செலவை சேர்க்கவும்." : "இன்னும் பதிவு இல்லை.";
+    tr.appendChild(td); tb.appendChild(tr);
+  }
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const d = document.createElement("td"); d.className = "d"; d.textContent = showDate(r.date);
+    const i = document.createElement("td");
+    const ta = document.createElement("div"); ta.className = "ta"; ta.textContent = r.ta || r.en;
+    const en = document.createElement("div"); en.className = "en"; en.textContent = r.ta ? r.en : "";
+    i.append(ta, en);
+    const a = document.createElement("td"); a.className = "a"; a.textContent = fmt(r.amt);
+    const x = document.createElement("td"); x.className = "x";
+    if (role === "edit") {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "del" + (armed === r.id ? " sure" : "");
+      b.textContent = armed === r.id ? "நீக்கவா?" : "✕";
+      b.onclick = async () => {
+        if (armed !== r.id) { armed = r.id; render(); return; }
+        armed = null;
+        try { await api("DELETE", "?id=" + encodeURIComponent(r.id)); items = items.filter(z => z.id !== r.id); render(); }
+        catch (e) { note("நீக்க முடியவில்லை."); }
+      };
+      x.appendChild(b);
+    }
+    tr.append(d, i, a, x); tb.appendChild(tr);
+  }
+  const ym = today().slice(0, 7);
+  $("tAll").textContent = fmt(items.reduce((s,r) => s + Number(r.amt||0), 0));
+  $("tMonth").textContent = fmt(items.filter(r => (r.date||"").startsWith(ym)).reduce((s,r) => s + Number(r.amt||0), 0));
+  $("count").textContent = items.length ? items.length + " பதிவுகள்" : "";
+}
+
+async function load() {
+  const j = await api("GET");
+  role = j.role; items = j.items;
+  $("login").hidden = true; $("app").hidden = false;
+  $("entry").hidden = role !== "edit";
+  $("sub").textContent = role === "edit" ? "English-ல் எழுதுங்கள், தமிழில் சேமிக்கும்." : "பார்வை மட்டும்";
+  note(""); render();
+}
+
+function showLogin(msg) {
+  $("app").hidden = true; $("login").hidden = false; $("lerr").textContent = msg || "";
+}
+
+$("lf").addEventListener("submit", async e => {
+  e.preventDefault();
+  code = $("code").value.trim();
+  try { await load(); try { localStorage.setItem(KEY, code); } catch (x) {} $("code").value = ""; }
+  catch (err) { showLogin(err.status === 401 ? "குறியீடு தவறு." : err.message); }
+});
+$("logout").onclick = () => { try { localStorage.removeItem(KEY); } catch (e) {} code = ""; items = []; showLogin(""); };
+
+// English -> Tamil
+async function toTamil(text) {
+  try {
+    const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=en|ta");
+    const j = await r.json();
+    const t = j && j.responseData && j.responseData.translatedText;
+    if (t && /[஀-௿]/.test(t)) return t;
+  } catch (e) {}
+  try {
+    const r = await fetch("https://inputtools.google.com/request?itc=ta-t-i0-und&num=1&text=" + encodeURIComponent(text));
+    const j = await r.json();
+    if (j[0] === "SUCCESS") return j[1].map(x => x[1][0]).join(" ");
+  } catch (e) {}
+  return "";
+}
+let timer;
+$("ta").addEventListener("input", () => { taEdited = true; });
+$("en").addEventListener("input", () => {
+  clearTimeout(timer);
+  const text = $("en").value.trim();
+  if (!text) { $("ta").value = ""; $("hint").textContent = ""; taEdited = false; return; }
+  timer = setTimeout(async () => {
+    const my = ++seq;
+    $("hint").textContent = "மொழிபெயர்க்கிறது...";
+    const ta = await toTamil(text);
+    if (my !== seq) return;
+    if (ta && !taEdited) $("ta").value = ta;
+    $("hint").textContent = ta ? "" : "மாற்ற முடியவில்லை. தமிழில் நீங்களே எழுதலாம்.";
+  }, 500);
+});
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("add"); btn.disabled = true;
+  try {
+    const en = $("en").value.trim();
+    let ta = $("ta").value.trim();
+    if (!ta) ta = await toTamil(en);
+    const it = await api("POST", "", { date: $("date").value, en, ta, amt: Number($("amt").value) });
+    items.push(it); render();
+    $("en").value = ""; $("ta").value = ""; $("amt").value = ""; $("hint").textContent = ""; taEdited = false; seq++;
+    $("en").focus(); note("");
+  } catch (err) { note(err.status === 401 ? "மீண்டும் உள்நுழையவும்." : "சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்."); }
+  finally { btn.disabled = false; }
+});
+
+(async function init() {
+  try { code = localStorage.getItem(KEY) || ""; } catch (e) {}
+  if (!code) return showLogin("");
+  try { await load(); } catch (err) { showLogin(err.status === 401 ? "குறியீடு தவறு." : err.message); }
+})();
+</script>
+</body>
+</html>
