@@ -39,7 +39,9 @@ module.exports = async (req, res) => {
       for (let i = 1; i < flat.length; i += 2) {
         try { items.push({ id: flat[i - 1], ...JSON.parse(flat[i]) }); } catch (e) {}
       }
-      return res.status(200).json({ role, items });
+      let settings = { total: 0, arun: 0 };
+      try { const s = await redis(["GET", "settings"]); if (s) settings = JSON.parse(s); } catch (e) {}
+      return res.status(200).json({ role, items, settings });
     }
 
     if (role !== "edit") return res.status(403).json({ error: "View only" });
@@ -57,6 +59,17 @@ module.exports = async (req, res) => {
       const item = { date, en, ta, amt, ts: Date.now() };
       await redis(["HSET", "expenses", id, JSON.stringify(item)]);
       return res.status(200).json({ id, ...item });
+    }
+
+    if (req.method === "PUT") {
+      const b = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+      const total = Number(b.total), arun = Number(b.arun);
+      if (!Number.isFinite(total) || !Number.isFinite(arun) || total < 0 || arun < 0 || total > 1e12 || arun > 1e12) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      const s = { total, arun };
+      await redis(["SET", "settings", JSON.stringify(s)]);
+      return res.status(200).json(s);
     }
 
     if (req.method === "DELETE") {
