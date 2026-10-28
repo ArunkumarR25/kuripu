@@ -44,8 +44,20 @@ td.x { width:1%; text-align:right; }
 .head h2 { font-size:15px; margin:0; }
 .link { background:none; border:0; color:var(--muted); text-decoration:underline; padding:0; font-size:13px; }
 .err { color:var(--alert); font-size:13px; min-height:1.4em; }
+.bal { display:grid; grid-template-columns:1fr 1fr; gap:14px 10px; }
+.bal .k { font-size:12px; color:var(--muted); }
+.bal .v { font-family:"Mukta Malar","Noto Sans Tamil",sans-serif; font-weight:800; font-size:22px; font-variant-numeric:tabular-nums; }
+.bal .main .v { font-size:28px; }
+.neg { color:var(--alert); }
+.setf { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+.mlist { display:flex; flex-direction:column; }
+.mrow { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; background:transparent; color:var(--ink); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:11px 4px; text-align:left; font-weight:400; }
+.mrow:last-child { border-bottom:0; }
+.mrow .n { color:var(--muted); font-size:12px; }
+.mrow .t { font-variant-numeric:tabular-nums; }
+.mrow.on { color:var(--accent); font-weight:700; }
 [hidden] { display:none !important; }
-@media (max-width:420px) { form { grid-template-columns:1fr; } h1 { font-size:24px; } }
+@media (max-width:420px) { form { grid-template-columns:1fr; } .setf { grid-template-columns:1fr 1fr; } .setf button { grid-column:1/-1; } h1 { font-size:24px; } }
 </style>
 </head>
 <body>
@@ -77,9 +89,25 @@ td.x { width:1%; text-align:right; }
       </form>
     </section>
 
-    <section class="totals" style="margin-bottom:16px">
-      <div class="panel tot"><div class="k">இந்த மாதம் / This month</div><div class="v" id="tMonth">₹0</div></div>
-      <div class="panel tot"><div class="k">மொத்தம் / All time</div><div class="v" id="tAll">₹0</div></div>
+    <section class="panel" style="margin-bottom:16px">
+      <div class="bal">
+        <div class="main"><div class="k">மொத்த இருப்பு / Total balance</div><div class="v" id="bTotal">₹0</div></div>
+        <div class="main"><div class="k">மீதி / Remaining</div><div class="v" id="bLeft">₹0</div></div>
+        <div><div class="k">அப்பா தொகை / Appa's amount</div><div class="v" id="bAppa">₹0</div></div>
+        <div><div class="k">அருண் தொகை / Arun's amount</div><div class="v" id="bArun">₹0</div></div>
+        <div><div class="k">மொத்த செலவு / Total spent</div><div class="v" id="bSpent">₹0</div></div>
+        <div><div class="k" id="bMonthK">இந்த மாதம்</div><div class="v" id="bMonth">₹0</div></div>
+      </div>
+      <form class="setf" id="sf" hidden>
+        <div><label for="sTotal">மொத்த இருப்பு (₹)</label><input id="sTotal" type="number" inputmode="decimal" min="0" step="0.01"></div>
+        <div><label for="sArun">அருண் தொகை (₹)</label><input id="sArun" type="number" inputmode="decimal" min="0" step="0.01"></div>
+        <button type="submit" id="sSave">சேமி</button>
+      </form>
+    </section>
+
+    <section class="panel" style="margin-bottom:16px">
+      <div class="head"><h2>மாத வாரியாக / By month</h2></div>
+      <div class="mlist" id="mlist"></div>
     </section>
 
     <section class="panel">
@@ -104,6 +132,7 @@ const MON = ["ஜன","பிப்","மார்","ஏப்","மே","ஜூ
 const showDate = s => { const [y,m,d] = s.split("-"); return d + " " + (MON[+m-1] || m) + " " + y.slice(2); };
 const KEY = "sk_code";
 let code = "", role = "", items = [], armed = null, taEdited = false, seq = 0;
+let settings = { total: 0, arun: 0 }, sel = today().slice(0, 7);
 
 $("date").value = today();
 function note(t) { const m = $("msg"); m.textContent = t; m.hidden = !t; }
@@ -119,7 +148,7 @@ async function api(method, path, body) {
 }
 
 function render() {
-  const rows = [...items].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.ts||0) - (a.ts||0));
+  const rows = items.filter(r => sel === "all" || (r.date||"").startsWith(sel)).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.ts||0) - (a.ts||0));
   const tb = $("rows"); tb.replaceChildren();
   if (!rows.length) {
     const tr = document.createElement("tr"), td = document.createElement("td");
@@ -150,17 +179,55 @@ function render() {
     }
     tr.append(d, i, a, x); tb.appendChild(tr);
   }
-  const ym = today().slice(0, 7);
-  $("tAll").textContent = fmt(items.reduce((s,r) => s + Number(r.amt||0), 0));
-  $("tMonth").textContent = fmt(items.filter(r => (r.date||"").startsWith(ym)).reduce((s,r) => s + Number(r.amt||0), 0));
-  $("count").textContent = items.length ? items.length + " பதிவுகள்" : "";
+  $("count").textContent = rows.length ? rows.length + " பதிவுகள்" : "";
+  renderSummary();
+}
+
+function monthLabel(ym) { const [y, m] = ym.split("-"); return (MON[+m - 1] || m) + " " + y; }
+function sum(list) { return list.reduce((s, r) => s + Number(r.amt || 0), 0); }
+
+function renderSummary() {
+  const spent = sum(items), total = Number(settings.total || 0), arun = Number(settings.arun || 0);
+  const left = total - spent;
+  $("bTotal").textContent = fmt(total);
+  $("bLeft").textContent = fmt(left);
+  $("bLeft").className = "v" + (left < 0 ? " neg" : "");
+  $("bAppa").textContent = fmt(total - arun);
+  $("bArun").textContent = fmt(arun);
+  $("bSpent").textContent = fmt(spent);
+
+  const by = {};
+  for (const r of items) { const k = (r.date || "").slice(0, 7); if (k) (by[k] = by[k] || []).push(r); }
+  by[today().slice(0, 7)] = by[today().slice(0, 7)] || [];
+  if (sel !== "all") by[sel] = by[sel] || [];
+  const keys = Object.keys(by).sort().reverse();
+
+  $("bMonthK").textContent = sel === "all" ? "அனைத்தும் / All" : monthLabel(sel) + " செலவு";
+  $("bMonth").textContent = fmt(sum(sel === "all" ? items : by[sel]));
+
+  const ml = $("mlist"); ml.replaceChildren();
+  const mk = (key, label, n, amt) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mrow" + (sel === key ? " on" : "");
+    const l = document.createElement("span"); l.textContent = label;
+    const c = document.createElement("span"); c.className = "n"; c.textContent = n + " பதிவுகள்";
+    const t = document.createElement("span"); t.className = "t"; t.textContent = fmt(amt);
+    const left = document.createElement("span"); left.append(l, document.createTextNode("  "), c);
+    b.append(left, t);
+    b.onclick = () => { sel = key; armed = null; render(); };
+    ml.appendChild(b);
+  };
+  for (const k of keys) mk(k, monthLabel(k), by[k].length, sum(by[k]));
+  mk("all", "அனைத்தும் / All", items.length, spent);
 }
 
 async function load() {
   const j = await api("GET");
-  role = j.role; items = j.items;
+  role = j.role; items = j.items; settings = j.settings || settings;
   $("login").hidden = true; $("app").hidden = false;
   $("entry").hidden = role !== "edit";
+  $("sf").hidden = role !== "edit";
+  if (role === "edit") { $("sTotal").value = settings.total || ""; $("sArun").value = settings.arun || ""; }
   $("sub").textContent = role === "edit" ? "English-ல் எழுதுங்கள், தமிழில் சேமிக்கும்." : "பார்வை மட்டும்";
   note(""); render();
 }
@@ -176,6 +243,16 @@ $("lf").addEventListener("submit", async e => {
   catch (err) { showLogin(err.status === 401 ? "குறியீடு தவறு." : err.message); }
 });
 $("logout").onclick = () => { try { localStorage.removeItem(KEY); } catch (e) {} code = ""; items = []; showLogin(""); };
+
+$("sf").addEventListener("submit", async e => {
+  e.preventDefault();
+  const b = $("sSave"); b.disabled = true;
+  try {
+    settings = await api("PUT", "", { total: Number($("sTotal").value || 0), arun: Number($("sArun").value || 0) });
+    renderSummary(); note("சேமிக்கப்பட்டது.");
+  } catch (err) { note("சேமிக்க முடியவில்லை."); }
+  finally { b.disabled = false; }
+});
 
 // English -> Tamil
 async function toTamil(text) {
@@ -216,7 +293,9 @@ $("f").addEventListener("submit", async e => {
     let ta = $("ta").value.trim();
     if (!ta) ta = await toTamil(en);
     const it = await api("POST", "", { date: $("date").value, en, ta, amt: Number($("amt").value) });
-    items.push(it); render();
+    items.push(it);
+    if (sel !== "all") sel = (it.date || "").slice(0, 7) || sel;
+    render();
     $("en").value = ""; $("ta").value = ""; $("amt").value = ""; $("hint").textContent = ""; taEdited = false; seq++;
     $("en").focus(); note("");
   } catch (err) { note(err.status === 401 ? "மீண்டும் உள்நுழையவும்." : "சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்."); }
